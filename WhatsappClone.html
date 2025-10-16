@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Clone (Monolith)</title>
+    <!-- Tailwind CSS para un diseño rápido y moderno -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React y Babel para renderizar el frontend -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Iconos para la UI -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <style>
+        /* Estilo para la barra de desplazamiento */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 6px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // ===================================================================================
+        // ||                                                                               ||
+        // ||                         INICIO: BACKEND SIMULADO (API)                        ||
+        // ||                                                                               ||
+        // ===================================================================================
+        // En una aplicación real, esto estaría en un servidor separado (Node.js, Express, etc.)
+        // y se conectaría a una base de datos real como PostgreSQL o MongoDB.
+
+        // --- Base de Datos en Memoria (Simulación de PostgreSQL/MongoDB) ---
+        const db = {
+            // Tabla de usuarios
+            users: [
+                { id: 1, name: "Maria", avatar: "https://placehold.co/100x100/f87171/ffffff?text=M" },
+                { id: 2, name: "Carlos", avatar: "https://placehold.co/100x100/60a5fa/ffffff?text=C" },
+                { id: 3, name: "Ana", avatar: "https://placehold.co/100x100/facc15/ffffff?text=A" },
+                { id: 4, name: "Luis", avatar: "https://placehold.co/100x100/4ade80/ffffff?text=L" },
+            ],
+            // Tabla de mensajes
+            messages: [
+                { id: 1, from: 1, to: 0, text: "Hola, ¿cómo estás?", timestamp: new Date(Date.now() - 1000 * 60 * 5) },
+                { id: 2, from: 0, to: 1, text: "¡Hola, Maria! Todo bien por aquí, ¿y tú?", timestamp: new Date(Date.now() - 1000 * 60 * 4) },
+                { id: 3, from: 1, to: 0, text: "Genial! Quería preguntarte sobre el proyecto.", timestamp: new Date(Date.now() - 1000 * 60 * 3) },
+                { id: 4, from: 2, to: 0, text: "Nos vemos mañana.", timestamp: new Date(Date.now() - 1000 * 60 * 10) },
+            ],
+            // El usuario actual (tú)
+            currentUser: { id: 0, name: "Tú", avatar: "https://placehold.co/100x100/c084fc/ffffff?text=T" },
+        };
+
+        // --- Lógica de los Endpoints (Simulación de Express.js) ---
+        const api = {
+            // GET /users -> Endpoint para obtener todos los usuarios excepto el actual.
+            getUsers: () => {
+                return new Promise(resolve => {
+                    setTimeout(() => {
+                        resolve(db.users);
+                    }, 500); // Simula latencia de red
+                });
+            },
+            // GET /messages/:contactId -> Endpoint para obtener los mensajes de un chat.
+            getMessages: (contactId) => {
+                return new Promise(resolve => {
+                    setTimeout(() => {
+                        const chatMessages = db.messages.filter(
+                            msg => (msg.from === db.currentUser.id && msg.to === contactId) ||
+                                   (msg.from === contactId && msg.to === db.currentUser.id)
+                        );
+                        resolve(chatMessages.sort((a, b) => a.timestamp - b.timestamp));
+                    }, 300);
+                });
+            },
+            // POST /messages -> Endpoint para enviar un mensaje.
+            sendMessage: (contactId, text) => {
+                return new Promise(resolve => {
+                    setTimeout(() => {
+                        const newMessage = {
+                            id: db.messages.length + 1,
+                            from: db.currentUser.id,
+                            to: contactId,
+                            text,
+                            timestamp: new Date()
+                        };
+                        db.messages.push(newMessage);
+                        resolve(newMessage);
+                    }, 200);
+                });
+            }
+        };
+
+        // ===================================================================================
+        // ||                          FIN: BACKEND SIMULADO (API)                          ||
+        // ===================================================================================
+
+
+        // ===================================================================================
+        // ||                                                                               ||
+        // ||                     INICIO: FRONTEND (Aplicación React)                       ||
+        // ||                                                                               ||
+        // ===================================================================================
+
+        // --- Componente: Encabezado del Chat ---
+        const ChatHeader = ({ contact }) => {
+            if (!contact) return null;
+            return (
+                <div className="flex items-center p-3 border-b border-gray-200 bg-gray-50">
+                    <img src={contact.avatar} alt={contact.name} className="w-10 h-10 rounded-full mr-4" />
+                    <h2 className="text-lg font-semibold text-gray-700">{contact.name}</h2>
+                </div>
+            );
+        };
+
+        // --- Componente: Mensaje Individual ---
+        const ChatMessage = ({ message, isCurrentUser }) => {
+            const alignment = isCurrentUser ? "justify-end" : "justify-start";
+            const bgColor = isCurrentUser ? "bg-emerald-500 text-white" : "bg-white text-gray-700";
+            const time = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            return (
+                <div className={`flex ${alignment} mb-3`}>
+                    <div className={`max-w-xs md:max-w-md lg:max-w-lg px-4 py-2 rounded-xl shadow ${bgColor}`}>
+                        <p>{message.text}</p>
+                        <p className="text-xs text-right opacity-70 mt-1">{time}</p>
+                    </div>
+                </div>
+            );
+        };
+        
+        // --- Componente: Lista de Mensajes ---
+        const MessageList = ({ messages, currentUser }) => {
+            const messagesEndRef = useRef(null);
+
+            const scrollToBottom = () => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            };
+
+            useEffect(scrollToBottom, [messages]);
+
+            return (
+                <div className="flex-1 p-4 overflow-y-auto bg-gray-200" style={{ backgroundImage: "url('https://i.pinimg.com/736x/8c/98/99/8c98994518b575bfd8c949e91d20548b.jpg')" }}>
+                    {messages.map(msg => (
+                        <ChatMessage key={msg.id} message={msg} isCurrentUser={msg.from === currentUser.id} />
+                    ))}
+                    <div ref={messagesEndRef} />
+                </div>
+            );
+        };
+
+        // --- Componente: Barra de Envío de Mensaje ---
+        const MessageInput = ({ onSendMessage }) => {
+            const [text, setText] = useState('');
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (text.trim()) {
+                    onSendMessage(text);
+                    setText('');
+                }
+            };
+
+            return (
+                <form onSubmit={handleSubmit} className="p-4 bg-gray-50 border-t border-gray-200">
+                    <div className="flex items-center bg-white rounded-full p-2 shadow-sm">
+                        <input
+                            type="text"
+                            value={text}
+                            onChange={(e) => setText(e.target.value)}
+                            placeholder="Escribe un mensaje aquí"
+                            className="flex-1 bg-transparent border-none focus:ring-0 outline-none px-4 text-gray-700"
+                        />
+                        <button type="submit" className="bg-emerald-500 text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-emerald-600 transition-colors">
+                            <i className="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </form>
+            );
+        };
+        
+        // --- Componente: Ventana de Chat Principal ---
+        const ChatWindow = ({ contact, messages, onSendMessage, currentUser }) => {
+            if (!contact) {
+                return (
+                    <div className="hidden md:flex flex-col items-center justify-center h-full w-full bg-gray-200 text-gray-500">
+                        <i className="fab fa-whatsapp text-6xl mb-4 text-gray-300"></i>
+                        <h2 className="text-xl">Selecciona un chat para comenzar</h2>
+                        <p>Clon de WhatsApp creado con React y un backend simulado.</p>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="flex flex-col h-full w-full">
+                    <ChatHeader contact={contact} />
+                    <MessageList messages={messages} currentUser={currentUser} />
+                    <MessageInput onSendMessage={onSendMessage} />
+                </div>
+            );
+        };
+
+        // --- Componente: Lista de Contactos ---
+        const ContactList = ({ contacts, onSelectContact, activeContactId }) => {
+            return (
+                <div className="w-full md:w-1/3 lg:w-1/4 h-full bg-white border-r border-gray-200 flex flex-col">
+                    <div className="p-4 border-b border-gray-200 bg-gray-50">
+                        <h1 className="text-xl font-bold text-gray-800">Chats</h1>
+                    </div>
+                    <div className="flex-1 overflow-y-auto">
+                        {contacts.map(contact => (
+                            <div
+                                key={contact.id}
+                                onClick={() => onSelectContact(contact)}
+                                className={`flex items-center p-3 cursor-pointer hover:bg-gray-100 transition-colors ${activeContactId === contact.id ? 'bg-emerald-50' : ''}`}
+                            >
+                                <img src={contact.avatar} alt={contact.name} className="w-12 h-12 rounded-full mr-4" />
+                                <div>
+                                    <h3 className="font-semibold text-gray-800">{contact.name}</h3>
+                                    <p className="text-sm text-gray-500">Último mensaje...</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+        
+        // --- Componente Principal de la Aplicación ---
+        const App = () => {
+            const [contacts, setContacts] = useState([]);
+            const [activeContact, setActiveContact] = useState(null);
+            const [messages, setMessages] = useState([]);
+            const [isLoading, setIsLoading] = useState(true);
+            const currentUser = db.currentUser;
+
+            // Cargar contactos iniciales desde la API simulada
+            useEffect(() => {
+                api.getUsers().then(data => {
+                    setContacts(data);
+                    setIsLoading(false);
+                });
+            }, []);
+            
+            // Cargar mensajes cuando se selecciona un contacto
+            useEffect(() => {
+                if (activeContact) {
+                    api.getMessages(activeContact.id).then(data => {
+                        setMessages(data);
+                    });
+                }
+            }, [activeContact]);
+
+            const handleSelectContact = (contact) => {
+                setActiveContact(contact);
+            };
+
+            const handleSendMessage = (text) => {
+                if(activeContact){
+                    api.sendMessage(activeContact.id, text).then(newMessage => {
+                        setMessages([...messages, newMessage]);
+                    });
+                }
+            };
+            
+            if (isLoading) {
+                return <div className="flex items-center justify-center h-screen">Cargando...</div>;
+            }
+
+            return (
+                <div className="flex h-screen antialiased text-gray-800">
+                    <div className="flex flex-row h-full w-full overflow-x-hidden">
+                        <ContactList 
+                            contacts={contacts} 
+                            onSelectContact={handleSelectContact}
+                            activeContactId={activeContact?.id}
+                        />
+                        <div className="flex-1">
+                           <ChatWindow 
+                                contact={activeContact}
+                                messages={messages}
+                                onSendMessage={handleSendMessage}
+                                currentUser={currentUser}
+                           />
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Renderizar la aplicación en el DOM
+        ReactDOM.render(<App />, document.getElementById('root'));
+
+        // ===================================================================================
+        // ||                           FIN: FRONTEND (Aplicación React)                      ||
+        // ===================================================================================
+
+    </script>
+</body>
+</html>
